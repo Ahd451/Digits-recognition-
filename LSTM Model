@@ -1,0 +1,100 @@
+import pandas as pd
+import numpy as np
+from keras.utils import to_categorical
+from sklearn.model_selection import train_test_split
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+import warnings 
+from sklearn.model_selection import KFold
+warnings.simplefilter('ignore')
+from sklearn.metrics import accuracy_score
+
+#---------------------------------------------------
+
+
+Xtrain = pd.read_excel('X_train.xlsx', header=None)
+Xtrain = np. array(Xtrain) 
+Xtrain = Xtrain.reshape(24000, 30, 12)
+
+
+Ytrain = pd.read_excel('Y_train.xlsx', header=None)
+Ytrain = np. array(Ytrain) 
+Ytrain = to_categorical(Ytrain, num_classes=10)
+
+#---------------------------------------------------
+
+# Splitting the data into training and validation sets
+X_train, X_val, Y_train, Y_val = train_test_split(Xtrain, Ytrain, test_size=0.2, random_state=42)
+
+print ( "Xtrain : " , X_train.shape )
+print ( "Ytrain : " , Y_train .shape)
+print ( "X_val : " , X_val.shape )
+print ( "Y_val : " , Y_val.shape )
+
+
+#---------------------------------------------------
+
+kfold = KFold(n_splits=3, shuffle=True)
+fold_no = 1
+acc_per_fold = []
+loss_per_fold = []
+
+
+for train_index, val_index in kfold.split(X_train, Y_train):
+    classifier = Sequential()
+
+    # Adding the first LSTM layer and some Dropout regularisation
+    classifier.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], X_train.shape[2])))
+    classifier.add(Dropout(0.2))
+
+
+    for layer in range(2) :
+    # Adding a second LSTM layer and some Dropout regularisation
+        classifier.add(LSTM(units = 30, return_sequences = True))
+        classifier.add(Dropout(0.5))
+
+
+    # Adding a last LSTM layer and some Dropout regularisation
+    classifier.add(LSTM(units = 30))
+    classifier.add(Dropout(0.5))
+
+    # Adding the output layer
+    classifier.add(Dense(units = 10,activation='softmax'))
+
+    # Compiling the RNN
+    classifier.compile(optimizer = 'Adamax', loss = 'categorical_crossentropy', metrics=['accuracy'])
+
+    # Fitting the RNN to the Training set 
+    history = classifier.fit(X_train[train_index], Y_train[train_index], epochs=80, batch_size=32)
+    
+    scores = classifier.evaluate(X_train[val_index], Y_train[val_index], verbose=1)
+    print(f'Score for fold {fold_no}: {classifier.metrics_names[0]} of {scores[0]}; {classifier.metrics_names[1]} of {scores[1]*100}%')
+    acc_per_fold.append(scores[1] * 100)
+    loss_per_fold.append(scores[0])
+    fold_no = fold_no + 1
+    
+acc_per_fold = np.array(acc_per_fold)
+print("Accuracy: {:.2f} %".format(acc_per_fold.mean()))
+print("Standard Deviation: {:.2f} %".format(acc_per_fold.std()))
+
+#---------------------------------------------------
+
+
+Xtest = pd.read_excel('X_test.xlsx', header=None)
+Xtest = np. array(Xtest) 
+Xtest = Xtest.reshape(6000, 30, 12)
+
+Ytest = pd.read_excel('Y_test.xlsx', header=None)
+Ytest = np. array(Ytest) 
+
+#---------------------------------------------------
+
+Y_predict = classifier.predict(Xtest)
+Y_predict = np.argmax(Y_predict, axis=1)
+
+print (Ytest.shape , "\n" ,  Y_predict.shape )
+
+accuracy = accuracy_score(Ytest, Y_predict)
+print ( "Test Accuracy : " , accuracy*100 )
