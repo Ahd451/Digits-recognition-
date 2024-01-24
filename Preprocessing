@@ -1,0 +1,195 @@
+import os
+import shutil
+import librosa 
+import numpy as np
+from sklearn.model_selection import train_test_split 
+from sklearn.preprocessing import MinMaxScaler
+from openpyxl import Workbook
+
+#----------------------------------------------------------------
+
+folder_name = "NewData"
+if not os.path.exists(folder_name):
+    os.mkdir(folder_name)
+
+for i in range(10):
+    file = folder_name + '\\' + str(i) 
+    if not os.path.exists(file):
+        os.mkdir(file)
+
+#----------------------------------------------------------------
+
+folder_path = r"data"
+folders_in_folder = os.listdir(folder_path)
+
+for person in folders_in_folder:
+    
+    if person is not None:
+        
+        person_path = folder_path + "\\"+ person # data\01
+        
+        person_files  = os.listdir(person_path) 
+        
+        if person_files is not None:
+            
+            for file in person_files :
+                
+                file_path = person_path + "\\" + file # data\01\0_01_0.wav
+                destination_path = "NewData\\" + file[0] + '\\' + file #  NewData\0\0_01_0.wav
+                if not os.path.exists(destination_path):
+                    shutil.copy(file_path, destination_path)
+
+#----------------------------------------------------------------
+
+
+num_mfcc = 12 
+max_frames = 30  # Maximum number of frames/time steps
+
+mfcc_sequences = []
+y = []
+
+# Extract MFCC features for each audio file
+
+folder_path = r"NewData"
+folders = os.listdir(folder_path) # digits folder
+
+for digit in folders:
+    
+    if digit is not None:
+        
+        digit_path = folder_path +"\\"+ digit 
+        sounds  = os.listdir(digit_path) # voices for each digit 
+        
+        if sounds is not None:
+            
+            for voice in sounds : # iterate over each voice 
+                
+                file_path = digit_path +"\\" + voice 
+                
+                #audio : list of amplitude , sampling_rate : NO.samples per sec
+                audio_data, sampling_rate = librosa.load(file_path)
+                
+                mfccs = librosa.feature.mfcc(y=audio_data, sr=8000, n_mfcc=12) # NO.MFCC * NO.frames
+                #num_frames = int((len(audio_data) - 1) / 512) + 1
+                
+                
+                #  to make number of frames equal in all voices 
+                if mfccs.shape[1] > max_frames:
+                    mfccs = mfccs[:, :max_frames]  # Truncate if more frames than max_frames
+                else:
+                    pad_width = max_frames - mfccs.shape[1]
+                                                    #1st dim , 2ed dim       all padding values are equal 
+                    mfccs = np.pad(mfccs, pad_width=((0, 0), (0, pad_width)), mode='constant')  
+
+                mfcc_sequences.append(mfccs.T)  # Transpose for time steps as first dimension
+                y.append(int(voice[0])) 
+                
+
+#----------------------------------------------------------------
+
+
+data = np.array(mfcc_sequences)
+y = np.array (y)
+print("Shape of the 3D array:")
+print(data.shape , y.shape )
+
+
+# we reshaped for making scaler as it accept <= 2d 
+reshaped_data = data.reshape(-1, data.shape[-1])
+reshaped_data.shape
+
+sc = MinMaxScaler(feature_range = (0, 1))
+data = sc.fit_transform(reshaped_data)
+
+data = data.reshape(30000, 30, 12)
+print ( data .shape )
+
+
+#----------------------------------------------------------------
+
+
+X_train, X_test, Y_train, Y_test = train_test_split(data, y, test_size=0.2, random_state=42)
+
+print ( "X_train : " , X_train.shape )
+print ( "X_test : " , X_test.shape )
+print ( "Y_train : " , Y_train.shape )
+print ( "Y_test : " , Y_test.shape )
+
+
+#----------------------------------------------------------------
+
+reshaped_Xtrain = X_train.reshape(-1, X_train.shape[-1])
+
+data = reshaped_Xtrain
+data = data.tolist()
+
+wb = Workbook()
+sheet = wb.active
+
+formatted_row = []
+
+for i in data :
+    for val in i:
+        if isinstance(val, float):
+            formatted_row.append(round(val, 3))
+        else:
+            formatted_row.append(val)
+    sheet.append(formatted_row)
+
+
+excel_file_path = 'X_train.xlsx'
+wb.save(filename=excel_file_path)
+
+#----------------------------------------------------------------
+
+
+data = Y_train.reshape ( -1 , 1 )
+data = data.tolist()
+
+wb = Workbook()
+sheet = wb.active
+
+for i in data :
+    sheet.append(i)
+
+excel_file_path = 'Y_train.xlsx'
+wb.save(filename=excel_file_path)
+
+#----------------------------------------------------------------
+
+
+reshaped_Xtest = X_test.reshape(-1, X_test.shape[-1])
+
+data = reshaped_Xtest
+data = data.tolist()
+
+wb = Workbook()
+sheet = wb.active
+formatted_row = []
+
+for i in data :
+    for val in i:
+        if isinstance(val, float):
+            formatted_row.append(round(val, 3))
+        else:
+            formatted_row.append(val)
+    sheet.append(formatted_row)
+
+excel_file_path = 'X_test.xlsx'
+wb.save(filename=excel_file_path)
+
+#----------------------------------------------------------------
+
+reshaped_Ytest = Y_test.reshape(-1, 1)
+print (reshaped_Ytest.shape)
+data = reshaped_Ytest
+data = data.tolist()
+
+wb = Workbook()
+sheet = wb.active
+
+for i in data :
+    sheet.append(i)
+
+excel_file_path = 'Y_test.xlsx'
+wb.save(filename=excel_file_path)
